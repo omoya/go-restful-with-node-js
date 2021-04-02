@@ -22,10 +22,11 @@ const app = express();
 // Configure requests/endpoints/routers
 // ####################################
 
+// load router
+const sequences = require("./routers/sequences");
+
 // requests
-app.get("/", (req, res) => {
-  res.send("Good request!");
-});
+app.use("/sequences", sequences);
 
 // ###################
 // Start server
