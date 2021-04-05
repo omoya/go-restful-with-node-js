@@ -1,0 +1,25 @@
+version: "3"
+services:
+  goingrestful:
+    container_name: gorestful
+    image: gorestful
+    restart: always
+    build: .
+    ports:
+      - "2000:2000"
+    links:
+      - mongo
+  mongo:
+    container_name: mongo
+    image: mongo
+    volumes:
+      - mongodata:/data/db
+    ports:
+      - "27017:27017"
+volumes:
+  mongodata:
+# This dockerfile file is based in this tutorial:
+# https://medium.com/zenofai/how-to-build-a-node-js-and-mongodb-application-with-docker-containers-15e535baabf5
+# It should be adjusted because mongo was shutting down with error 14 after stopping and restarting
+# the container. A solution to that problem was found at:
+# https://stackoverflow.com/questions/54911021/unable-to-start-docker-mongo-image-on-windows

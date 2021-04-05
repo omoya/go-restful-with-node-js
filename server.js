@@ -23,16 +23,20 @@ app.use(express.json()); // Express middleware that includes the request body in
 // ###################
 // Connect to MongoDB
 // ###################
-//https://github.com/vercel/next.js/discussions/12294
-// This connection used in all Mongo queries (More performant than opening one each query).
-
 // Create a MongoDB connection pool and start the application
-// after the database connection is ready
+// after the database connection is ready.
+//
+// The server is started within the connection function. This way it is possible to use it
+// in all Mongo queries (More performant than opening one each query).
+// https://github.com/vercel/next.js/discussions/12294
+
+// URI used in a composed Docker container: https://stackoverflow.com/questions/54911021/unable-to-start-docker-mongo-image-on-windows
+
 mongodb.MongoClient.connect(
-  "mongodb://localhost:27017/",
+  "mongodb://mongo:27017/",
   { useUnifiedTopology: true },
 
-  function (err, database) {
+  (err, database) => {
     if (err) throw err;
     app.locals.db = database.db("testdb");
 
