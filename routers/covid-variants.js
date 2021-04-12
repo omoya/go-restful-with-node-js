@@ -32,27 +32,50 @@ const getVariantsRouter = (dbConnection) => {
   // GET. Get all variants
   variants_router.get("/", function (req, res) {
     redisClient.get("all_variants", function (redisGetErr, reply) {
-      if (redisGetErr) console.dir("No cached data present", redisGetErr);
-      // reply is null when the key is missing
-      else if (!reply) console.dir("The key does not exist in Redis");
-      else console.dir("cached data retrieved", reply);
-    });
+      // If Redis has a value for that key it is returned without quering Mongo.
+      if (reply) {
+        console.log("cached data retrieved from REDIS");
+        return res.status(200).json({
+          results: JSON.parse(reply),
+          redis_report: "Data retrieved from Redis cache.",
+        });
+      }
 
-    collection.find({}).toArray((error, docs) => {
-      if (error) return res.status(500).json({ error: error });
-      redisClient.set(
-        "all_variants",
-        JSON.stringify(docs),
-        function (redisError, reply) {
-          if (redisError) {
-            console.log(redisError);
-            return res.status(200).json(docs);
-          } else {
-            console.log("Caching data", reply);
-            return res.status(200).json(docs);
+      // If a Redis error was retrieved or reply was null the Mongo query is performed.
+      // Redis returns null in the reply when the key is missing.
+      // The API response will inform of what happened.
+      collection.find({}).toArray((mongoError, docs) => {
+        // Mongo error: status 500. Inform API consumer.
+        if (mongoError) return res.status(500).json({ error: mongoError });
+        // Mongo success but Redis error. Status 200 + Redis warning.
+        if (redisGetErr)
+          return res.status(200).json({
+            results: docs,
+            redis_report:
+              "Redis might be down. Cache operations are not possible. This can reduce the App's performance.",
+          });
+
+        // Mongo success and Redis response is null (the required key didn't exist).
+        // Status 200 + Use Mongo response to SET redis cache for subsequent API calls.
+        redisClient.set(
+          "all_variants",
+          JSON.stringify(docs),
+          function (redisSetError, reply) {
+            if (redisSetError) {
+              console.log(redisSetError);
+              return res
+                .status(200)
+                .json({ results: docs, redis_report: redisSetError });
+            } else {
+              console.log("Caching data", reply);
+              return res.status(200).json({
+                results: docs,
+                redis_report: "Data cached correctly by Redis.",
+              });
+            }
           }
-        }
-      );
+        );
+      });
     });
   });
 
@@ -65,6 +88,14 @@ const getVariantsRouter = (dbConnection) => {
       return res.status(200).json(doc);
     });
   });
+
+  // client.del("dummyvalue", function (err, response) {
+  //   if (response == 1) {
+  //     console.log("Deleted Successfully!");
+  //   } else {
+  //     console.log("Cannot delete");
+  //   }
+  // });
 
   // POST. Create a new variant.
   variants_router.post("/", (req, res) => {
