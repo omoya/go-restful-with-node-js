@@ -1,14 +1,11 @@
 version: "3"
 services:
-  goingrestful:
-    container_name: gorestful
-    image: gorestful
-    restart: always
-    build: .
+  redis:
+    container_name: redis
+    image: "redis:alpine"
+    hostname: redis
     ports:
-      - "2000:2000"
-    links:
-      - mongo
+      - "6379:6379"
   mongo:
     container_name: mongo
     image: mongo
@@ -16,6 +13,19 @@ services:
       - mongodata:/data/db
     ports:
       - "27017:27017"
+  goingrestful:
+    container_name: gorestful
+    image: gorestful
+    # restart: always
+    build: .
+    ports:
+      - "2000:2000"
+    links:
+      - mongo
+      - redis:redis
+    environment:
+      - REDIS_URL=redis://redis
+
 volumes:
   mongodata:
 # This dockerfile file is based in this tutorial:
