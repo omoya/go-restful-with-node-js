@@ -16,6 +16,8 @@
  */
 
 const express = require("express");
+const redis = require("redis"); // Redis client. Used to cache data in memory to ensure high performant data acceses.
+const redisClient = redis.createClient(process.env.REDIS_URL);
 
 const getVariantsRouter = (dbConnection) => {
   const variants_router = express.Router(); // create the router
@@ -27,11 +29,30 @@ const getVariantsRouter = (dbConnection) => {
     next();
   });
 
-  // // GET. Get all sequences
+  // GET. Get all variants
   variants_router.get("/", function (req, res) {
+    redisClient.get("all_variants", function (redisGetErr, reply) {
+      if (redisGetErr) console.dir("No cached data present", redisGetErr);
+      // reply is null when the key is missing
+      else if (!reply) console.dir("The key does not exist in Redis");
+      else console.dir("cached data retrieved", reply);
+    });
+
     collection.find({}).toArray((error, docs) => {
       if (error) return res.status(500).json({ error: error });
-      return res.status(200).json(docs);
+      redisClient.set(
+        "all_variants",
+        JSON.stringify(docs),
+        function (redisError, reply) {
+          if (redisError) {
+            console.log(redisError);
+            return res.status(200).json(docs);
+          } else {
+            console.log("Caching data", reply);
+            return res.status(200).json(docs);
+          }
+        }
+      );
     });
   });
 
