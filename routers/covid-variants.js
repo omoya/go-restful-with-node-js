@@ -70,7 +70,8 @@ const getVariantsRouter = (dbConnection) => {
               console.log("Caching data", reply);
               return res.status(200).json({
                 results: docs,
-                redis_report: "Data cached correctly by Redis.",
+                redis_report:
+                  "Redis cache updated with Mongo response results.",
               });
             }
           }
@@ -101,13 +102,22 @@ const getVariantsRouter = (dbConnection) => {
   variants_router.post("/", (req, res) => {
     collection.insertOne(req.body, (error, insertedDoc) => {
       if (error) return res.status(500).json({ error: error });
-      return res
-        .status(200)
-        .json({ result: "success", insertedDoc: insertedDoc });
+      // the cache is deleted if a new variant is included.
+      // the next GET will call mongo to retrieve the updated variants and then write the cache again.
+      redisClient.del("all_variants", function (redisDelError, redisDelReply) {
+        return res.status(200).json({
+          result: "success",
+          insertedDoc: insertedDoc,
+          redis_report:
+            (redisDelReply == 0) | redisDelError
+              ? "Warning: Redis delete error. Cached data might be inconsistent."
+              : "Variants cache deleted.",
+        });
+      });
     });
   });
 
-  // PUT. Create a new svariant or update an existing one. Replace the whole documemt.
+  // PUT. Create a new variant or update an existing one. Replace the whole documemt.
   variants_router.put("/:variant_id", (req, res) => {
     collection.replaceOne(
       { variant_id: req.params.variant_id },
@@ -115,9 +125,21 @@ const getVariantsRouter = (dbConnection) => {
       { upsert: true },
       (error, replacedDoc) => {
         if (error) return res.status(500).json({ error: error });
-        return res
-          .status(200)
-          .json({ result: "success", replacedDoc: replacedDoc });
+        // the cache is deleted if a new variant is included or updated.
+        // the next GET will call mongo to retrieve the updated variants and then write the cache again.
+        redisClient.del(
+          "all_variants",
+          function (redisDelError, redisDelReply) {
+            return res.status(200).json({
+              result: "success",
+              replacedDoc: replacedDoc,
+              redis_report:
+                (redisDelReply == 0) | redisDelError
+                  ? "Warning: Redis delete error. Cached data might be inconsistent."
+                  : "Variants cache deleted.",
+            });
+          }
+        );
       }
     );
   });
@@ -129,15 +151,27 @@ const getVariantsRouter = (dbConnection) => {
       { $set: req.body },
       (err, result) => {
         if (err) return res.status(500).json({ error: err });
+
         if (result.result.n === 0)
           return res.status(200).json({
             result: "warning",
             message: `Patch (update) operation could not be applied. The variant ${req.params.variant_id} was not found in the collection.`,
           });
-        return res.status(200).json({
-          result: "success",
-          message: `The variant ${req.params.variant_id} has been updated`,
-        });
+        // the cache is deleted if a variant is updated.
+        // the next GET will call mongo to retrieve the updated variants and then write the cache again.
+        redisClient.del(
+          "all_variants",
+          function (redisDelError, redisDelReply) {
+            return res.status(200).json({
+              result: "success",
+              message: `The variant ${req.params.variant_id} has been updated`,
+              redis_report:
+                (redisDelReply == 0) | redisDelError
+                  ? "Warning: Redis delete error. Cached data might be inconsistent."
+                  : "Variants cache deleted.",
+            });
+          }
+        );
       }
     );
   });
@@ -153,10 +187,22 @@ const getVariantsRouter = (dbConnection) => {
             result: "warning",
             message: `Delete operation could not be applied. The variant ${req.params.variant_id} was not found in the collection.`,
           });
-        return res.status(200).json({
-          result: "success",
-          message: `The variant ${req.params.variant_id} has been deleted`,
-        });
+
+        // the cache is deleted if a variant is removed .
+        // the next GET will call mongo to retrieve the updated variants and then write the cache again.
+        redisClient.del(
+          "all_variants",
+          function (redisDelError, redisDelReply) {
+            return res.status(200).json({
+              result: "success",
+              message: `The variant ${req.params.variant_id} has been deleted`,
+              redis_report:
+                (redisDelReply == 0) | redisDelError
+                  ? "Warning: Redis delete error. Cached data might be inconsistent."
+                  : "Variants cache deleted.",
+            });
+          }
+        );
       }
     );
   });
